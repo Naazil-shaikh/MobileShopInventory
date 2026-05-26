@@ -342,6 +342,8 @@ Uses `refreshToken` cookie, or:
 }
 ```
 
+`gstNumber` is optional — omit it for wholesalers who are not GST-registered.
+
 ---
 
 ### Customers — `/api/v1/customers`

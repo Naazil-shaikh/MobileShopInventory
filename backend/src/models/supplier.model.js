@@ -25,7 +25,6 @@ const supplierSchema = new Schema(
     },
     gstNumber: {
       type: String,
-      required: true,
       trim: true,
     },
   },

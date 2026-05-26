@@ -1,16 +1,65 @@
-# React + Vite
+# Mobile Shop Inventory — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React dashboard for the Mobile Shop Inventory Management API.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19 + Vite
+- Tailwind CSS 4
+- React Router DOM
+- TanStack React Query
+- React Hook Form + Zod
+- Axios
 
-## React Compiler
+## Setup
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+cd frontend
+npm install
+cp .env.example .env   # or use existing .env
+npm run dev
+```
 
-## Expanding the ESLint configuration
+Ensure the backend is running on `http://localhost:8000` with `CORS_ORIGIN=http://localhost:5173`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Environment
+
+| Variable | Default |
+|----------|---------|
+| `VITE_API_BASE_URL` | `http://localhost:8000/api/v1` |
+
+## Architecture
+
+```
+src/
+├── api/           # Axios client + interceptors
+├── services/      # API calls (no fetch in components)
+├── schemas/       # Zod validation
+├── context/       # Auth state
+├── hooks/         # Shared hooks
+├── components/    # Reusable UI + feature components
+├── pages/         # Route pages
+├── layouts/       # Dashboard shell
+└── routes/        # Router + protected routes
+```
+
+## Pages
+
+| Route | Description |
+|-------|-------------|
+| `/login` | Authentication |
+| `/` | Dashboard overview |
+| `/products` | Product CRUD, search, filter |
+| `/suppliers` | Supplier CRUD |
+| `/customers` | Customers + purchase history |
+| `/inventory` | Stock ops + history + low stock |
+| `/mobile-units` | IMEI registration & search |
+| `/sales` | Create sale + invoice history |
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview production build |

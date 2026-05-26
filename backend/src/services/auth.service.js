@@ -20,7 +20,7 @@ const registerUser = async ({ username, email, password }) => {
   }
 
   const user = await User.create({
-    username,
+    username: username.toLowerCase(),
     email,
     password,
   });
@@ -76,8 +76,6 @@ const refreshAccessToken = async (incomingRefreshToken) => {
   if (!incomingRefreshToken) {
     throw new ApiError(401, "Refresh token is required");
   }
-
-  
 
   let decoded;
   try {

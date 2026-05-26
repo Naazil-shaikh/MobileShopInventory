@@ -18,7 +18,8 @@ const register = asyncHandler(async (req, res) => {
 });
 
 const login = asyncHandler(async (req, res) => {
-  const { user, accessToken, refreshToken } = await loginUser(req.body);
+  const { email, username, password } = req.body;
+  const { user, accessToken, refreshToken } = await loginUser({ email, username, password });
 
   const options = cookieOptions;
 
