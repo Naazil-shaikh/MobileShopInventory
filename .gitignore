@@ -5,3 +5,4 @@ build
 coverage
 .DS_Store
 .env.sample
+.env.example

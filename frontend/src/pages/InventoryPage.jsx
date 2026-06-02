@@ -182,6 +182,10 @@ export const InventoryPage = () => {
         queryKey: [QUERY_KEYS.dashboard],
       });
 
+      queryClient.invalidateQueries({
+        queryKey: ["payables", "finance-overview"],
+      });
+
       setActionType(null);
       setSuccess("Stock updated successfully");
       setError("");

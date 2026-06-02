@@ -1,6 +1,10 @@
 import { Sale } from "../models/sale.model.js";
+import { ApiError } from "./ApiError.js";
 
-const generateInvoiceNumber = async () => {
+const generateInvoiceNumber = async (shopId) => {
+  if (!shopId) {
+    throw new ApiError(500, "shopId is required to generate invoice");
+  }
   const date = new Date();
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -8,6 +12,7 @@ const generateInvoiceNumber = async () => {
   const prefix = `INV-${y}${m}${d}`;
 
   const lastSale = await Sale.findOne({
+    shopId,
     invoiceNumber: new RegExp(`^${prefix}`),
   })
     .sort({ createdAt: -1 })

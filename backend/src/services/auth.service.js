@@ -1,9 +1,34 @@
 import { User } from "../models/user.model.js";
+import { Shop } from "../models/shop.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import jwt from "jsonwebtoken";
 
-const registerUser = async ({ username, email, password }) => {
-  if (!username || !email || !password) {
+const toSlug = (value) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const generateUniqueShopSlug = async (shopName) => {
+  const base = toSlug(shopName) || `shop-${Date.now()}`;
+  let slug = base;
+  let i = 1;
+  while (await Shop.exists({ slug })) {
+    slug = `${base}-${i}`;
+    i += 1;
+  }
+  return slug;
+};
+
+const registerUser = async ({
+  fullName,
+  username,
+  email,
+  password,
+  shopName,
+}) => {
+  if (!fullName || !username || !email || !password || !shopName) {
     throw new ApiError(400, "All fields are required");
   }
 
@@ -19,11 +44,23 @@ const registerUser = async ({ username, email, password }) => {
     throw new ApiError(409, "User with email or username already exists");
   }
 
+  const slug = await generateUniqueShopSlug(shopName);
+  const shop = await Shop.create({
+    name: shopName.trim(),
+    slug,
+  });
+
   const user = await User.create({
+    fullName: fullName.trim(),
     username: username.toLowerCase(),
     email,
     password,
+    shopId: shop._id,
+    role: "owner",
   });
+
+  shop.owner = user._id;
+  await shop.save({ validateBeforeSave: false });
 
   const createdUser = await User.findById(user._id).select(
     "-password -refreshToken",
@@ -39,7 +76,7 @@ const loginUser = async ({ email, username, password }) => {
 
   const user = await User.findOne({
     $or: [{ email }, { username }],
-  });
+  }).populate("shopId", "name slug");
 
   if (!user) {
     throw new ApiError(404, "User not found");
@@ -57,9 +94,9 @@ const loginUser = async ({ email, username, password }) => {
   user.refreshToken = refreshToken;
   await user.save({ validateBeforeSave: false });
 
-  const loggedInUser = await User.findById(user._id).select(
-    "-password -refreshToken",
-  );
+  const loggedInUser = await User.findById(user._id)
+    .select("-password -refreshToken")
+    .populate("shopId", "name slug");
 
   return { user: loggedInUser, accessToken, refreshToken };
 };
@@ -68,7 +105,8 @@ const logoutUser = async (userId) => {
   await User.findByIdAndUpdate(
     userId,
     { $unset: { refreshToken: 1 } },
-    { new: true },
+    // { new: true },
+    { returnDocument: "after" },
   );
 };
 

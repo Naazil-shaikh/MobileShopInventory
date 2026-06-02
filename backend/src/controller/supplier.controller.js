@@ -8,28 +8,28 @@ import {
 } from "../services/supplier.service.js";
 
 const createSupplierHandler = asyncHandler(async (req, res) => {
-  const supplier = await createSupplier(req.body);
+  const supplier = await createSupplier(req.body, req.user);
   return res
     .status(201)
     .json(new ApiResponse(201, supplier, "Supplier created successfully"));
 });
 
 const updateSupplierHandler = asyncHandler(async (req, res) => {
-  const supplier = await updateSupplier(req.params.id, req.body);
+  const supplier = await updateSupplier(req.params.id, req.body, req.user);
   return res
     .status(200)
     .json(new ApiResponse(200, supplier, "Supplier updated successfully"));
 });
 
 const deleteSupplierHandler = asyncHandler(async (req, res) => {
-  const result = await deleteSupplier(req.params.id);
+  const result = await deleteSupplier(req.params.id, req.user);
   return res
     .status(200)
     .json(new ApiResponse(200, result, "Supplier deleted successfully"));
 });
 
 const listSuppliersHandler = asyncHandler(async (req, res) => {
-  const data = await listSuppliers(req.query);
+  const data = await listSuppliers(req.query, req.user);
   return res
     .status(200)
     .json(new ApiResponse(200, data, "Suppliers fetched successfully"));

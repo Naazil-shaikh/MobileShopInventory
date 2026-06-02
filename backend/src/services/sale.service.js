@@ -8,8 +8,10 @@ import { assertValidObjectId } from "../utils/validateObjectId.js";
 import { getPagination, buildPaginationMeta } from "../utils/pagination.js";
 import { generateInvoiceNumber } from "../utils/generateInvoiceNumber.js";
 import { reduceStock } from "./inventory.service.js";
+import { Installment } from "../models/installment.model.js";
+import { CashbookEntry } from "../models/cashbookEntry.model.js";
 
-const validateSaleItems = async (items) => {
+const validateSaleItems = async (items, shopId) => {
   if (!Array.isArray(items) || items.length === 0) {
     throw new ApiError(400, "Sale must contain at least one item");
   }
@@ -36,7 +38,7 @@ const validateSaleItems = async (items) => {
       throw new ApiError(400, "Item price cannot be negative");
     }
 
-    const product = await Product.findById(productId);
+    const product = await Product.findOne({ _id: productId, shopId });
     if (!product) {
       throw new ApiError(404, `Product not found: ${productId}`);
     }
@@ -61,6 +63,7 @@ const validateSaleItems = async (items) => {
       imeiIds.forEach((id) => assertValidObjectId(id, "imeiId"));
 
       const units = await MobileUnit.find({
+        shopId,
         _id: { $in: imeiIds },
         productId,
         status: "in_stock",
@@ -93,19 +96,64 @@ const validateSaleItems = async (items) => {
   return validatedItems;
 };
 
-const createSale = async ({ customerId, items, paymentMethod, soldBy }) => {
+const createInstallmentSchedule = async ({
+  sale,
+  customerId,
+  shopId,
+  tenure,
+  downPayment,
+  session,
+}) => {
+  const remaining = sale.totalAmount - downPayment;
+  const installmentAmount = Math.ceil(remaining / tenure);
+  const installments = [];
+  const now = new Date();
+
+  for (let i = 0; i < tenure; i++) {
+    const dueDate = new Date(now);
+    dueDate.setMonth(dueDate.getMonth() + i + 1);
+    const amount =
+      i === tenure - 1
+        ? remaining - installmentAmount * (tenure - 1)
+        : installmentAmount;
+
+    installments.push({
+      shopId,
+      saleId: sale._id,
+      customerId,
+      installmentNumber: i + 1,
+      dueDate,
+      amount,
+      paidAmount: 0,
+      status: dueDate < now ? "overdue" : "pending",
+    });
+  }
+
+  await Installment.insertMany(installments, { session });
+};
+
+const createSale = async ({
+  customerId,
+  items,
+  paymentMethod,
+  soldBy,
+  shopId,
+  paymentPlan = "full",
+  downPayment = 0,
+  emiTenure,
+}) => {
   assertValidObjectId(customerId, "customerId");
 
   if (!paymentMethod) {
     throw new ApiError(400, "Payment method is required");
   }
 
-  const customer = await Customer.findById(customerId);
+  const customer = await Customer.findOne({ _id: customerId, shopId });
   if (!customer) {
     throw new ApiError(404, "Customer not found");
   }
 
-  const validatedItems = await validateSaleItems(items);
+  const validatedItems = await validateSaleItems(items, shopId);
 
   const totalAmount = validatedItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
@@ -116,7 +164,20 @@ const createSale = async ({ customerId, items, paymentMethod, soldBy }) => {
     throw new ApiError(400, "Total amount must be greater than 0");
   }
 
-  const invoiceNumber = await generateInvoiceNumber();
+  const plan = paymentPlan || "full";
+  const down = Number(downPayment) || 0;
+
+  if (plan === "emi" && (!emiTenure || emiTenure < 2)) {
+    throw new ApiError(400, "EMI tenure must be at least 2 months");
+  }
+  if (down > totalAmount) {
+    throw new ApiError(400, "Down payment cannot exceed total amount");
+  }
+
+  const amountPaid = plan === "full" ? totalAmount : down;
+  const balanceDue = totalAmount - amountPaid;
+
+  const invoiceNumber = await generateInvoiceNumber(shopId);
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -132,13 +193,80 @@ const createSale = async ({ customerId, items, paymentMethod, soldBy }) => {
       [
         {
           customerId,
+          shopId,
           items: saleItems,
           totalAmount,
           paymentMethod,
+          paymentPlan: plan,
+          downPayment: down,
+          amountPaid,
+          balanceDue,
+          emiTenure: plan === "emi" ? emiTenure : undefined,
           invoiceNumber,
           soldBy,
         },
       ],
+      { session },
+    );
+
+    if (amountPaid > 0) {
+      await CashbookEntry.create(
+        [
+          {
+            shopId,
+            type: "in",
+            category: plan === "full" ? "sale" : "customer_payment",
+            amount: amountPaid,
+            paymentMethod,
+            note: `Payment for ${invoiceNumber}`,
+            referenceId: sale._id,
+            referenceType: "Sale",
+            entryDate: new Date(),
+            createdBy: soldBy,
+          },
+        ],
+        { session },
+      );
+    }
+
+    if (plan === "emi") {
+      await createInstallmentSchedule({
+        sale,
+        customerId,
+        shopId,
+        tenure: emiTenure,
+        downPayment: down,
+        session,
+      });
+    }
+
+    if (plan === "credit" && balanceDue > 0) {
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 30);
+
+      await Installment.create(
+        [
+          {
+            shopId,
+            saleId: sale._id,
+            customerId,
+            installmentNumber: 1,
+            dueDate,
+            amount: balanceDue,
+            paidAmount: 0,
+            status: "pending",
+          },
+        ],
+        { session },
+      );
+    }
+
+    await Customer.updateOne(
+      { _id: customerId, shopId },
+      {
+        $inc: { totalPurchaseValue: totalAmount },
+        $set: { lastPurchaseAt: new Date() },
+      },
       { session },
     );
 
@@ -151,13 +279,14 @@ const createSale = async ({ customerId, items, paymentMethod, soldBy }) => {
           note: `Sale invoice ${invoiceNumber}`,
           referenceId: sale._id,
           referenceType: "Sale",
+          shopId,
         },
         session,
       );
 
       if (item.imeiIds?.length) {
         await MobileUnit.updateMany(
-          { _id: { $in: item.imeiIds } },
+          { _id: { $in: item.imeiIds }, shopId },
           {
             $set: {
               status: "sold",
@@ -171,7 +300,7 @@ const createSale = async ({ customerId, items, paymentMethod, soldBy }) => {
 
     await session.commitTransaction();
 
-    return await Sale.findById(sale._id)
+    return await Sale.findOne({ _id: sale._id, shopId })
       .populate("customerId", "name phone address")
       .populate("items.productId", "name brand category")
       .populate("items.imeiIds", "imei color storage status")
@@ -184,9 +313,11 @@ const createSale = async ({ customerId, items, paymentMethod, soldBy }) => {
   }
 };
 
-const getSaleHistory = async (query) => {
+const getSaleHistory = async (query, user) => {
   const { page, limit, skip } = getPagination(query);
-  const filter = {};
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
+  const filter = { shopId };
 
   if (query.customerId) {
     assertValidObjectId(query.customerId, "customerId");
@@ -220,11 +351,13 @@ const getSaleHistory = async (query) => {
   };
 };
 
-const getInvoiceDetails = async (identifier) => {
+const getInvoiceDetails = async (identifier, user) => {
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
   let sale;
 
   if (mongoose.Types.ObjectId.isValid(identifier)) {
-    sale = await Sale.findById(identifier)
+    sale = await Sale.findOne({ _id: identifier, shopId })
       .populate("customerId", "name phone address")
       .populate("items.productId", "name brand category sellingPrice")
       .populate("items.imeiIds", "imei color storage status")
@@ -232,7 +365,7 @@ const getInvoiceDetails = async (identifier) => {
   }
 
   if (!sale) {
-    sale = await Sale.findOne({ invoiceNumber: identifier })
+    sale = await Sale.findOne({ shopId, invoiceNumber: identifier })
       .populate("customerId", "name phone address")
       .populate("items.productId", "name brand category sellingPrice")
       .populate("items.imeiIds", "imei color storage status")

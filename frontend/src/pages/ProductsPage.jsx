@@ -61,6 +61,10 @@ export const ProductsPage = () => {
         queryKey: [QUERY_KEYS.dashboard],
       });
 
+      queryClient.invalidateQueries({
+        queryKey: ["payables", "finance-overview"],
+      });
+
       setModalOpen(false);
       setError("");
     },

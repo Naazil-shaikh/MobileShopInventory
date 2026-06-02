@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { loginSchema } from "../schemas/auth.schema.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { Input } from "../components/ui/Input.jsx";
@@ -15,6 +15,7 @@ export const LoginPage = () => {
   const location = useLocation();
 
   const [error, setError] = useState("");
+  const registered = Boolean(location.state?.registered);
 
   const {
     register,
@@ -100,6 +101,12 @@ export const LoginPage = () => {
             onSubmit={handleSubmit(onSubmit)}
             className="space-y-5"
           >
+            {registered && (
+              <Alert
+                type="success"
+                message="Account created successfully. Please sign in."
+              />
+            )}
             <Alert type="error" message={error} />
 
             <div className="space-y-4">
@@ -135,8 +142,14 @@ export const LoginPage = () => {
 
           {/* ── footer ── */}
           <div className="mt-8 border-t border-slate-100 pt-5 text-center">
-            <p className="text-xs text-slate-400">
-              Secure access to inventory and sales management
+            <p className="text-xs text-slate-500">
+              Don’t have an account?{" "}
+              <Link
+                to="/register"
+                className="font-semibold text-violet-700 hover:text-violet-800"
+              >
+                Create one
+              </Link>
             </p>
           </div>
         </div>

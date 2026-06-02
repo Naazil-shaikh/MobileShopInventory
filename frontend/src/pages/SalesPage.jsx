@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { saleService } from "../services/sale.service.js";
+import { customerService } from "../services/customer.service.js";
 import { QUERY_KEYS } from "../utils/constants.js";
 import { CreateSaleForm } from "../components/sales/CreateSaleForm.jsx";
 import { Pagination } from "../components/ui/Pagination.jsx";
@@ -29,30 +30,12 @@ export const SalesPage = () => {
       }),
   });
 
-  const { data: createdCustomers = [] } = useQuery({
-    queryKey: ["created-customers"],
-
-    queryFn: () => [],
-
-    staleTime: Infinity,
-    initialData: [],
+  const { data: customersData } = useQuery({
+    queryKey: ["customers-sales"],
+    queryFn: () => customerService.getAll({ page: 1, limit: 200 }),
   });
 
-  const customers = useMemo(() => {
-    const map = new Map();
-
-    createdCustomers.forEach((c) =>
-      map.set(c._id, c)
-    );
-
-    salesData?.sales?.forEach((s) => {
-      if (s.customerId?._id) {
-        map.set(s.customerId._id, s.customerId);
-      }
-    });
-
-    return Array.from(map.values());
-  }, [salesData, createdCustomers]);
+  const customers = customersData?.customers ?? [];
 
   const {
     data: invoice,

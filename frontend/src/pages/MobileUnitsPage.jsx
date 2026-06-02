@@ -60,6 +60,10 @@ export const MobileUnitsPage = () => {
         queryKey: [QUERY_KEYS.inventoryHistory],
       });
 
+      queryClient.invalidateQueries({
+        queryKey: ["payables", "finance-overview"],
+      });
+
       setModalOpen(false);
 
       setSuccess("Devices registered successfully");

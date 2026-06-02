@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { dashboardService } from "../services/dashboard.service.js";
+import { reportService } from "../services/report.service.js";
+import { alertService } from "../services/alert.service.js";
 import { QUERY_KEYS } from "../utils/constants.js";
 import { PageLoader } from "../components/ui/LoadingSpinner.jsx";
 import { formatCurrency, formatDate, getApiErrorMessage } from "../utils/format.js";
@@ -184,6 +186,16 @@ export const DashboardPage = () => {
     queryFn: dashboardService.getSummary,
   });
 
+  const { data: profit } = useQuery({
+    queryKey: ["profit-month"],
+    queryFn: () => reportService.getProfit("month"),
+  });
+
+  const { data: alerts } = useQuery({
+    queryKey: ["alerts"],
+    queryFn: alertService.getAll,
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -364,6 +376,38 @@ export const DashboardPage = () => {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="font-semibold text-slate-900">Profit & Cash (This Month)</h2>
+          {profit && (
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <li>Gross profit: {formatCurrency(profit.sales?.grossProfit)}</li>
+              <li>Net cash flow: {formatCurrency(profit.netCashFlow)}</li>
+              <li>Receivables due: {formatCurrency(profit.receivablesDue)}</li>
+              <li>Payables due: {formatCurrency(profit.payablesDue)}</li>
+            </ul>
+          )}
+          <Link to="/finance" className="mt-3 inline-block text-sm font-medium text-violet-700">
+            Open Finance →
+          </Link>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="font-semibold text-slate-900">
+            Alerts ({alerts?.total || 0})
+          </h2>
+          <ul className="mt-3 space-y-2 text-sm">
+            {alerts?.alerts?.slice(0, 5).map((a) => (
+              <li key={a.type} className="rounded-lg bg-slate-50 px-3 py-2">
+                {a.message}
+              </li>
+            ))}
+          </ul>
+          <Link to="/reports" className="mt-3 inline-block text-sm font-medium text-violet-700">
+            View Reports →
+          </Link>
         </div>
       </div>
     </div>

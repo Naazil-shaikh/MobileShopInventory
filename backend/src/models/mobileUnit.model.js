@@ -1,6 +1,12 @@
 import mongoose from "mongoose";
 
 const mobileUnitSchema = new mongoose.Schema({
+  shopId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Shop",
+    required: true,
+    index: true,
+  },
   productId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",

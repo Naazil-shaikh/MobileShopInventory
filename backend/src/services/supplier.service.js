@@ -26,9 +26,9 @@ const normalizeSupplierData = (data) => {
 };
 
 const findDuplicateSupplier = async (data, excludeId = null) => {
-  const conditions = [{ email: data.email }];
+  const conditions = [{ email: data.email, shopId: data.shopId }];
   if (data.gstNumber) {
-    conditions.push({ gstNumber: data.gstNumber });
+    conditions.push({ gstNumber: data.gstNumber, shopId: data.shopId });
   }
 
   const filter = { $or: conditions };
@@ -39,26 +39,36 @@ const findDuplicateSupplier = async (data, excludeId = null) => {
   return Supplier.findOne(filter);
 };
 
-const createSupplier = async (data) => {
+const createSupplier = async (data, user) => {
   validateSupplierPayload(data);
-  const payload = normalizeSupplierData(data);
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
+  const payload = normalizeSupplierData({ ...data, shopId });
 
   const existing = await findDuplicateSupplier(payload);
   if (existing) {
-    throw new ApiError(409, "Supplier with this email or GST number already exists");
+    throw new ApiError(
+      409,
+      "Supplier with this email or GST number already exists",
+    );
   }
 
   return await Supplier.create(payload);
 };
 
-const updateSupplier = async (supplierId, data) => {
+const updateSupplier = async (supplierId, data, user) => {
   assertValidObjectId(supplierId, "supplierId");
   validateSupplierPayload(data, true);
-  const payload = normalizeSupplierData(data);
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
+  const payload = normalizeSupplierData({ ...data, shopId });
 
   const existing = await findDuplicateSupplier(payload, supplierId);
   if (existing) {
-    throw new ApiError(409, "Supplier with this email or GST number already exists");
+    throw new ApiError(
+      409,
+      "Supplier with this email or GST number already exists",
+    );
   }
 
   const updateOp = { $set: payload };
@@ -66,10 +76,10 @@ const updateSupplier = async (supplierId, data) => {
     updateOp.$unset = { gstNumber: 1 };
   }
 
-  const supplier = await Supplier.findByIdAndUpdate(
-    supplierId,
+  const supplier = await Supplier.findOneAndUpdate(
+    { _id: supplierId, shopId },
     updateOp,
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   );
 
   if (!supplier) {
@@ -79,15 +89,17 @@ const updateSupplier = async (supplierId, data) => {
   return supplier;
 };
 
-const deleteSupplier = async (supplierId) => {
+const deleteSupplier = async (supplierId, user) => {
   assertValidObjectId(supplierId, "supplierId");
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
-  const linkedProduct = await Product.exists({ supplier: supplierId });
+  const linkedProduct = await Product.exists({ supplier: supplierId, shopId });
   if (linkedProduct) {
     throw new ApiError(400, "Cannot delete supplier linked to products");
   }
 
-  const supplier = await Supplier.findByIdAndDelete(supplierId);
+  const supplier = await Supplier.findOneAndDelete({ _id: supplierId, shopId });
   if (!supplier) {
     throw new ApiError(404, "Supplier not found");
   }
@@ -95,9 +107,11 @@ const deleteSupplier = async (supplierId) => {
   return { deleted: true };
 };
 
-const listSuppliers = async (query) => {
+const listSuppliers = async (query, user) => {
   const { page, limit, skip } = getPagination(query);
-  const filter = {};
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
+  const filter = { shopId };
 
   if (query.search) {
     filter.$or = [

@@ -4,9 +4,10 @@ import { InventoryTransaction } from "../models/inventoryTransaction.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { assertValidObjectId } from "../utils/validateObjectId.js";
 import { getPagination, buildPaginationMeta } from "../utils/pagination.js";
+import { recordStockPurchaseBill } from "./finance.service.js";
 
-const getProductForStockOp = async (productId, session) => {
-  const product = await Product.findById(productId).session(session);
+const getProductForStockOp = async (productId, shopId, session) => {
+  const product = await Product.findOne({ _id: productId, shopId }).session(session);
   if (!product) {
     throw new ApiError(404, "Product not found");
   }
@@ -15,6 +16,7 @@ const getProductForStockOp = async (productId, session) => {
 
 const createInventoryTransaction = async (
   {
+    shopId,
     productId,
     type,
     quantity,
@@ -30,6 +32,7 @@ const createInventoryTransaction = async (
     [
       {
         productId,
+        shopId,
         type,
         quantity,
         previousStock,
@@ -45,7 +48,16 @@ const createInventoryTransaction = async (
 };
 
 const addStock = async (
-  { productId, quantity, note },
+  {
+    productId,
+    quantity,
+    note,
+    shopId,
+    purchasePaymentType,
+    supplierBillNumber,
+    paidAmount,
+  },
+  user = null,
   session = null,
 ) => {
   assertValidObjectId(productId, "productId");
@@ -55,7 +67,7 @@ const addStock = async (
   }
 
   const run = async (activeSession) => {
-    const product = await getProductForStockOp(productId, activeSession);
+    const product = await getProductForStockOp(productId, shopId, activeSession);
 
     if (product.hasIMEI) {
       throw new ApiError(
@@ -73,6 +85,7 @@ const addStock = async (
     const transaction = await createInventoryTransaction(
       {
         productId,
+        shopId,
         type: "add",
         quantity,
         previousStock,
@@ -85,8 +98,35 @@ const addStock = async (
     return { product, transaction };
   };
 
+  const finish = async (result) => {
+    if (user && result?.product) {
+      const { product, transaction } = result;
+      await recordStockPurchaseBill(
+        {
+          purchasePaymentType,
+          supplierBillNumber,
+          paidAmount,
+          supplierId: product.supplier,
+          totalAmount: quantity * product.purchasePrice,
+          items: [
+            {
+              description: `${product.name} (restock)`,
+              quantity,
+              unitCost: product.purchasePrice,
+              amount: quantity * product.purchasePrice,
+            },
+          ],
+          note: transaction.note,
+        },
+        user,
+      );
+    }
+    return result;
+  };
+
   if (session) {
-    return run(session);
+    const result = await run(session);
+    return finish(result);
   }
 
   const localSession = await mongoose.startSession();
@@ -94,7 +134,7 @@ const addStock = async (
   try {
     const result = await run(localSession);
     await localSession.commitTransaction();
-    return result;
+    return finish(result);
   } catch (error) {
     await localSession.abortTransaction();
     throw error;
@@ -104,7 +144,15 @@ const addStock = async (
 };
 
 const reduceStock = async (
-  { productId, quantity, type = "sale", note, referenceId, referenceType },
+  {
+    productId,
+    quantity,
+    type = "sale",
+    note,
+    referenceId,
+    referenceType,
+    shopId,
+  },
   session,
 ) => {
   assertValidObjectId(productId, "productId");
@@ -117,7 +165,7 @@ const reduceStock = async (
     throw new ApiError(500, "Session required for stock reduction");
   }
 
-  const product = await getProductForStockOp(productId, session);
+  const product = await getProductForStockOp(productId, shopId, session);
 
   if (product.currentStock < quantity) {
     throw new ApiError(
@@ -135,6 +183,7 @@ const reduceStock = async (
   const transaction = await createInventoryTransaction(
     {
       productId,
+      shopId,
       type,
       quantity,
       previousStock,
@@ -150,7 +199,7 @@ const reduceStock = async (
 };
 
 const returnStock = async (
-  { productId, quantity, note, referenceId, referenceType },
+  { productId, quantity, note, referenceId, referenceType, shopId },
   session = null,
 ) => {
   assertValidObjectId(productId, "productId");
@@ -160,7 +209,7 @@ const returnStock = async (
   }
 
   const run = async (activeSession) => {
-    const product = await getProductForStockOp(productId, activeSession);
+    const product = await getProductForStockOp(productId, shopId, activeSession);
 
     if (product.hasIMEI) {
       throw new ApiError(
@@ -178,6 +227,7 @@ const returnStock = async (
     const transaction = await createInventoryTransaction(
       {
         productId,
+        shopId,
         type: "return",
         quantity,
         previousStock,
@@ -210,7 +260,10 @@ const returnStock = async (
   }
 };
 
-const recordDamage = async ({ productId, quantity, note }, session = null) => {
+const recordDamage = async (
+  { productId, quantity, note, shopId },
+  session = null,
+) => {
   assertValidObjectId(productId, "productId");
 
   if (!quantity || quantity <= 0) {
@@ -218,7 +271,7 @@ const recordDamage = async ({ productId, quantity, note }, session = null) => {
   }
 
   const run = async (activeSession) => {
-    const product = await getProductForStockOp(productId, activeSession);
+    const product = await getProductForStockOp(productId, shopId, activeSession);
 
     if (product.currentStock < quantity) {
       throw new ApiError(400, "Cannot record damage exceeding current stock");
@@ -233,6 +286,7 @@ const recordDamage = async ({ productId, quantity, note }, session = null) => {
     const transaction = await createInventoryTransaction(
       {
         productId,
+        shopId,
         type: "damage",
         quantity,
         previousStock,
@@ -263,22 +317,25 @@ const recordDamage = async ({ productId, quantity, note }, session = null) => {
   }
 };
 
-const syncImeiProductStock = async (productId, session) => {
+const syncImeiProductStock = async (productId, shopId, session) => {
   const { MobileUnit } = await import("../models/mobileUnit.model.js");
   const inStockCount = await MobileUnit.countDocuments({
+    shopId,
     productId,
     status: "in_stock",
   }).session(session);
 
-  const product = await getProductForStockOp(productId, session);
+  const product = await getProductForStockOp(productId, shopId, session);
   product.currentStock = inStockCount;
   await product.save({ session });
   return product;
 };
 
-const getStockHistory = async (query) => {
+const getStockHistory = async (query, user) => {
   const { page, limit, skip } = getPagination(query);
-  const filter = {};
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
+  const filter = { shopId };
 
   if (query.productId) {
     assertValidObjectId(query.productId, "productId");
@@ -305,8 +362,11 @@ const getStockHistory = async (query) => {
   };
 };
 
-const getLowStockProducts = async () => {
+const getLowStockProducts = async (user) => {
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
   const products = await Product.find({
+    shopId,
     $expr: { $lte: ["$currentStock", "$lowStockThreshold"] },
   })
     .populate("supplier", "name phone")

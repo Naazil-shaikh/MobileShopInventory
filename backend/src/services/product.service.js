@@ -4,6 +4,21 @@ import { Sale } from "../models/sale.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { assertValidObjectId } from "../utils/validateObjectId.js";
 import { getPagination, buildPaginationMeta } from "../utils/pagination.js";
+import { recordStockPurchaseBill } from "./finance.service.js";
+
+const PURCHASE_FIELDS = [
+  "purchasePaymentType",
+  "supplierBillNumber",
+  "paidAmount",
+];
+
+const stripPurchaseFields = (data) => {
+  const productData = { ...data };
+  for (const key of PURCHASE_FIELDS) {
+    delete productData[key];
+  }
+  return productData;
+};
 
 const validateProductPayload = (data, isUpdate = false) => {
   const {
@@ -51,20 +66,54 @@ const validateProductPayload = (data, isUpdate = false) => {
   }
 };
 
-const createProduct = async (data) => {
+const createProduct = async (data, user) => {
   validateProductPayload(data);
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
+
+  const { purchasePaymentType, supplierBillNumber, paidAmount } = data;
+
+  const productData = stripPurchaseFields(data);
+  const stockQty = productData.hasIMEI ? 0 : productData.currentStock || 0;
 
   const product = await Product.create({
-    ...data,
-    currentStock: data.hasIMEI ? 0 : data.currentStock,
+    ...productData,
+    shopId,
+    currentStock: stockQty,
   });
 
-  return await Product.findById(product._id).populate("supplier");
+  if (stockQty > 0) {
+    await recordStockPurchaseBill(
+      {
+        purchasePaymentType,
+        supplierBillNumber,
+        paidAmount,
+        supplierId: productData.supplier,
+        totalAmount: stockQty * productData.purchasePrice,
+        items: [
+          {
+            description: `${productData.name} (initial stock)`,
+            quantity: stockQty,
+            unitCost: productData.purchasePrice,
+            amount: stockQty * productData.purchasePrice,
+          },
+        ],
+        note: `Initial stock for ${productData.name}`,
+      },
+      user,
+    );
+  }
+
+  return await Product.findOne({ _id: product._id, shopId }).populate(
+    "supplier",
+  );
 };
 
-const updateProduct = async (productId, data) => {
+const updateProduct = async (productId, data, user) => {
   assertValidObjectId(productId, "productId");
   validateProductPayload(data, true);
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
   if (data.currentStock !== undefined) {
     throw new ApiError(
@@ -73,10 +122,10 @@ const updateProduct = async (productId, data) => {
     );
   }
 
-  const product = await Product.findByIdAndUpdate(
-    productId,
+  const product = await Product.findOneAndUpdate(
+    { _id: productId, shopId },
     { $set: data },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   ).populate("supplier");
 
   if (!product) {
@@ -86,40 +135,61 @@ const updateProduct = async (productId, data) => {
   return product;
 };
 
-const deleteProduct = async (productId) => {
-  assertValidObjectId(productId, "productId");
+const deleteProduct = async (productId, user) => {
+  try {
+    assertValidObjectId(productId, "productId");
+    const shopId = user?.shopId;
+    if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
-  const product = await Product.findById(productId);
-  if (!product) {
-    throw new ApiError(404, "Product not found");
+    const product = await Product.findOne({ _id: productId, shopId });
+    if (!product) {
+      throw new ApiError(404, "Product not found");
+    }
+
+    if (product.currentStock > 0) {
+      throw new ApiError(400, "Cannot delete product with remaining stock");
+    }
+
+    const inStockUnits = await MobileUnit.countDocuments({
+      shopId,
+      productId,
+      status: "in_stock",
+    });
+
+    if (inStockUnits > 0) {
+      throw new ApiError(
+        400,
+        "Cannot delete product with in-stock mobile units",
+      );
+    }
+
+    const usedInSales = await Sale.exists({
+      shopId,
+      "items.productId": productId,
+    });
+    if (usedInSales) {
+      throw new ApiError(400, "Cannot delete product referenced in sales");
+    }
+
+    await Product.deleteOne({ _id: productId, shopId });
+    return { deleted: true };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    } else {
+      throw new ApiError(500, "Internal server error");
+    }
   }
-
-  if (product.currentStock > 0) {
-    throw new ApiError(400, "Cannot delete product with remaining stock");
-  }
-
-  const inStockUnits = await MobileUnit.countDocuments({
-    productId,
-    status: "in_stock",
-  });
-
-  if (inStockUnits > 0) {
-    throw new ApiError(400, "Cannot delete product with in-stock mobile units");
-  }
-
-  const usedInSales = await Sale.exists({ "items.productId": productId });
-  if (usedInSales) {
-    throw new ApiError(400, "Cannot delete product referenced in sales");
-  }
-
-  await Product.findByIdAndDelete(productId);
-  return { deleted: true };
 };
 
-const getProductById = async (productId) => {
+const getProductById = async (productId, user) => {
   assertValidObjectId(productId, "productId");
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
-  const product = await Product.findById(productId).populate("supplier");
+  const product = await Product.findOne({ _id: productId, shopId }).populate(
+    "supplier",
+  );
   if (!product) {
     throw new ApiError(404, "Product not found");
   }
@@ -127,9 +197,11 @@ const getProductById = async (productId) => {
   return product;
 };
 
-const getAllProducts = async (query) => {
+const getAllProducts = async (query, user) => {
   const { page, limit, skip } = getPagination(query);
-  const filter = {};
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
+  const filter = { shopId };
 
   if (query.category) {
     filter.category = query.category;

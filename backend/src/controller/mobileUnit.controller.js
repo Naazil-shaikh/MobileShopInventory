@@ -7,21 +7,21 @@ import {
 } from "../services/mobileUnit.service.js";
 
 const addMobileUnitsHandler = asyncHandler(async (req, res) => {
-  const data = await addMobileUnits(req.body);
+  const data = await addMobileUnits(req.body, req.user);
   return res
     .status(201)
     .json(new ApiResponse(201, data, "Mobile units added successfully"));
 });
 
 const searchByImeiHandler = asyncHandler(async (req, res) => {
-  const unit = await searchByImei(req.params.imei);
+  const unit = await searchByImei(req.params.imei, req.user);
   return res
     .status(200)
     .json(new ApiResponse(200, unit, "Mobile unit fetched successfully"));
 });
 
 const updateStatusHandler = asyncHandler(async (req, res) => {
-  const data = await updateMobileUnitStatus(req.params.id, req.body.status);
+  const data = await updateMobileUnitStatus(req.params.id, req.body.status, req.user);
   return res
     .status(200)
     .json(new ApiResponse(200, data, "Mobile unit status updated successfully"));

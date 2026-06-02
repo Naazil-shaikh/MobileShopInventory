@@ -34,10 +34,16 @@ export const ProductFormModal = ({
       lowStockThreshold: 2,
       supplier: "",
       hasIMEI: false,
+      purchasePaymentType: "paid",
+      supplierBillNumber: "",
+      paidAmount: 0,
     },
   });
 
   const hasIMEI = watch("hasIMEI");
+  const currentStock = watch("currentStock");
+  const purchasePaymentType = watch("purchasePaymentType");
+  const purchasePrice = watch("purchasePrice");
 
   useEffect(() => {
     if (product) {
@@ -63,6 +69,9 @@ export const ProductFormModal = ({
         lowStockThreshold: 2,
         supplier: "",
         hasIMEI: false,
+        purchasePaymentType: "paid",
+        supplierBillNumber: "",
+        paidAmount: 0,
       });
     }
   }, [product, reset, isOpen]);
@@ -135,8 +144,46 @@ export const ProductFormModal = ({
         </div>
         {hasIMEI && !product && (
           <p className="sm:col-span-2 text-xs text-amber-700">
-            IMEI products start with 0 stock. Register devices on the Mobile IMEI page.
+            IMEI products start with 0 stock. Register devices on the Mobile IMEI
+            page — enter the supplier bill number there when buying on credit.
           </p>
+        )}
+        {!product && !hasIMEI && Number(currentStock) > 0 && (
+          <div className="sm:col-span-2 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-800">Supplier purchase</p>
+            <Select
+              label="Payment to supplier"
+              options={[
+                { value: "paid", label: "Paid in full (cash/UPI/card)" },
+                { value: "credit", label: "On supplier credit (partial or full)" },
+              ]}
+              error={errors.purchasePaymentType?.message}
+              {...register("purchasePaymentType")}
+            />
+            {purchasePaymentType === "credit" && (
+              <>
+                <Input
+                  label="Supplier bill / invoice number"
+                  placeholder="e.g. INV/2025/1042 from supplier's bill"
+                  error={errors.supplierBillNumber?.message}
+                  {...register("supplierBillNumber")}
+                />
+                <Input
+                  label="Paid now to supplier"
+                  type="number"
+                  error={errors.paidAmount?.message}
+                  {...register("paidAmount")}
+                />
+                <p className="text-xs text-slate-500">
+                  Purchase total: ₹
+                  {(Number(currentStock) * Number(purchasePrice || 0)).toLocaleString(
+                    "en-IN",
+                  )}
+                  . Remaining balance will appear in Finance → Supplier Credit.
+                </p>
+              </>
+            )}
+          </div>
         )}
       </form>
     </Modal>

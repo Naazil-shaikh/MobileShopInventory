@@ -9,8 +9,14 @@ import {
 } from "../services/auth.service.js";
 
 const register = asyncHandler(async (req, res) => {
-  const { username, email, password } = req.body;
-  const user = await registerUser({ username, email, password });
+  const { fullName, username, email, password, shopName } = req.body;
+  const user = await registerUser({
+    fullName,
+    username,
+    email,
+    password,
+    shopName,
+  });
 
   return res
     .status(201)

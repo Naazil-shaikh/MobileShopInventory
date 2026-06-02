@@ -12,7 +12,11 @@ import { Alert } from "../components/ui/Alert.jsx";
 import { Modal } from "../components/ui/Modal.jsx";
 import { Input } from "../components/ui/Input.jsx";
 import { Pagination } from "../components/ui/Pagination.jsx";
-import { formatCurrency, formatDate, getApiErrorMessage } from "../utils/format.js";
+import {
+  formatCurrency,
+  formatDate,
+  getApiErrorMessage,
+} from "../utils/format.js";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,17 +55,21 @@ function CustomerRow({ customer, isSelected, onSelect }) {
         <div className="flex items-center gap-3">
           <div
             className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 tracking-wide ${avatarClass(
-              customer.name
+              customer.name,
             )}`}
           >
             {getInitials(customer.name)}
           </div>
-          <span className="text-sm font-medium text-slate-900">{customer.name}</span>
+          <span className="text-sm font-medium text-slate-900">
+            {customer.name}
+          </span>
         </div>
       </td>
 
       <td className="px-4 py-3 text-sm text-slate-500">{customer.phone}</td>
-      <td className="px-4 py-3 text-xs text-slate-400">{customer.address || "—"}</td>
+      <td className="px-4 py-3 text-xs text-slate-400">
+        {customer.address || "—"}
+      </td>
       <td className="px-4 py-3 text-right">
         <button
           onClick={(e) => {
@@ -137,7 +145,10 @@ export const CustomersPage = () => {
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: [QUERY_KEYS.customerPurchases, selectedId, historyPage],
     queryFn: () =>
-      customerService.getPurchaseHistory(selectedId, { page: historyPage, limit: 5 }),
+      customerService.getPurchaseHistory(selectedId, {
+        page: historyPage,
+        limit: 5,
+      }),
     enabled: Boolean(selectedId),
   });
 
@@ -169,7 +180,9 @@ export const CustomersPage = () => {
       {/* ── page header ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Customers</h1>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+            Customers
+          </h1>
           <p className="text-sm text-slate-400 mt-0.5">
             Manage customers and view purchase history
           </p>
@@ -187,7 +200,6 @@ export const CustomersPage = () => {
 
       {/* ── two-column layout ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 items-start">
-
         {/* ── left: customer table ── */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* column headers */}
@@ -297,7 +309,9 @@ export const CustomersPage = () => {
             ) : (
               <>
                 {historyData?.sales?.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-8">No purchases yet.</p>
+                  <p className="text-sm text-slate-400 text-center py-8">
+                    No purchases yet.
+                  </p>
                 ) : (
                   <div className="flex flex-col gap-2">
                     {historyData.sales.map((sale) => (
@@ -341,9 +355,21 @@ export const CustomersPage = () => {
         }
       >
         <div className="flex flex-col gap-4">
-          <Input label="Name" error={errors.name?.message} {...register("name")} />
-          <Input label="Phone" error={errors.phone?.message} {...register("phone")} />
-          <Input label="Address" error={errors.address?.message} {...register("address")} />
+          <Input
+            label="Name"
+            error={errors.name?.message}
+            {...register("name")}
+          />
+          <Input
+            label="Phone"
+            error={errors.phone?.message}
+            {...register("phone")}
+          />
+          <Input
+            label="Address"
+            error={errors.address?.message}
+            {...register("address")}
+          />
         </div>
       </Modal>
     </div>

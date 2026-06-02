@@ -10,6 +10,12 @@ import customerRouter from "./routes/customer.routes.js";
 import mobileUnitRouter from "./routes/mobileUnit.routes.js";
 import inventoryRouter from "./routes/inventory.routes.js";
 import saleRouter from "./routes/sale.routes.js";
+import reportRouter from "./routes/report.routes.js";
+import financeRouter from "./routes/finance.routes.js";
+import purchaseOrderRouter from "./routes/purchaseOrder.routes.js";
+import saleReturnRouter from "./routes/saleReturn.routes.js";
+import repairRouter from "./routes/repair.routes.js";
+import alertRouter from "./routes/alert.routes.js";
 
 const app = express();
 
@@ -38,6 +44,12 @@ app.use("/api/v1/customers", customerRouter);
 app.use("/api/v1/mobile-units", mobileUnitRouter);
 app.use("/api/v1/inventory", inventoryRouter);
 app.use("/api/v1/sales", saleRouter);
+app.use("/api/v1/reports", reportRouter);
+app.use("/api/v1/finance", financeRouter);
+app.use("/api/v1/purchase-orders", purchaseOrderRouter);
+app.use("/api/v1/returns", saleReturnRouter);
+app.use("/api/v1/repairs", repairRouter);
+app.use("/api/v1/alerts", alertRouter);
 
 app.use(errorHandler);
 

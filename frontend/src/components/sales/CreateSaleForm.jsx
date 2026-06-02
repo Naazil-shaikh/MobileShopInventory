@@ -21,6 +21,9 @@ const saleItemSchema = z.object({
 const saleSchema = z.object({
   customerId: z.string().min(1, "Customer is required"),
   paymentMethod: z.enum(["cash", "card", "upi"]),
+  paymentPlan: z.enum(["full", "emi", "credit"]),
+  downPayment: z.coerce.number().min(0).optional(),
+  emiTenure: z.coerce.number().min(2).optional(),
   items: z.array(saleItemSchema).min(1),
 });
 
@@ -51,12 +54,16 @@ export const CreateSaleForm = ({ customers, onSubmit, isLoading, error: external
     defaultValues: {
       customerId: "",
       paymentMethod: "cash",
+      paymentPlan: "full",
+      downPayment: 0,
+      emiTenure: 6,
       items: [{ productId: "", quantity: 1, price: 0 }],
     },
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
   const watchedItems = watch("items");
+  const paymentPlan = watch("paymentPlan");
 
   const subtotal = watchedItems.reduce((sum, item, i) => {
     const qty = Number(item.quantity) || 0;
@@ -96,7 +103,12 @@ export const CreateSaleForm = ({ customers, onSubmit, isLoading, error: external
       return payload;
     });
 
-    onSubmit({ ...data, items });
+    onSubmit({
+      ...data,
+      items,
+      downPayment: Number(data.downPayment) || 0,
+      emiTenure: data.paymentPlan === "emi" ? Number(data.emiTenure) : undefined,
+    });
   };
 
   const displayError = externalError || localError;
@@ -128,6 +140,30 @@ export const CreateSaleForm = ({ customers, onSubmit, isLoading, error: external
             error={errors.paymentMethod?.message}
             {...register("paymentMethod")}
           />
+          <Select
+            label="Payment Plan"
+            options={[
+              { value: "full", label: "Full Payment" },
+              { value: "emi", label: "EMI" },
+              { value: "credit", label: "Credit (partial)" },
+            ]}
+            error={errors.paymentPlan?.message}
+            {...register("paymentPlan")}
+          />
+          {paymentPlan !== "full" && (
+            <Input
+              label="Down Payment"
+              type="number"
+              {...register("downPayment")}
+            />
+          )}
+          {paymentPlan === "emi" && (
+            <Input
+              label="EMI Tenure (months)"
+              type="number"
+              {...register("emiTenure")}
+            />
+          )}
         </div>
 
         <div className="space-y-4">

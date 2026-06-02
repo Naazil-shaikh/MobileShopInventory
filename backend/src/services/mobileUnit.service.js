@@ -5,6 +5,7 @@ import { InventoryTransaction } from "../models/inventoryTransaction.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { assertValidObjectId } from "../utils/validateObjectId.js";
 import { syncImeiProductStock } from "./inventory.service.js";
+import { recordStockPurchaseBill } from "./finance.service.js";
 
 const validateUnitPayload = (unit) => {
   const { imei, color, storage, purchaseDate } = unit;
@@ -21,14 +22,25 @@ const validateUnitPayload = (unit) => {
   }
 };
 
-const addMobileUnits = async ({ productId, units }) => {
+const addMobileUnits = async (
+  {
+    productId,
+    units,
+    purchasePaymentType,
+    supplierBillNumber,
+    paidAmount,
+  },
+  user,
+) => {
   assertValidObjectId(productId, "productId");
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
   if (!Array.isArray(units) || units.length === 0) {
     throw new ApiError(400, "At least one mobile unit is required");
   }
 
-  const product = await Product.findById(productId);
+  const product = await Product.findOne({ _id: productId, shopId });
   if (!product) {
     throw new ApiError(404, "Product not found");
   }
@@ -45,7 +57,7 @@ const addMobileUnits = async ({ productId, units }) => {
     throw new ApiError(400, "Duplicate IMEI in request payload");
   }
 
-  const existingImei = await MobileUnit.findOne({ imei: { $in: imeis } });
+  const existingImei = await MobileUnit.findOne({ shopId, imei: { $in: imeis } });
   if (existingImei) {
     throw new ApiError(409, `IMEI already exists: ${existingImei.imei}`);
   }
@@ -60,6 +72,7 @@ const addMobileUnits = async ({ productId, units }) => {
     const createdUnits = await MobileUnit.insertMany(
       units.map((unit) => ({
         productId,
+        shopId,
         imei: unit.imei.trim(),
         color: unit.color,
         storage: unit.storage,
@@ -69,12 +82,13 @@ const addMobileUnits = async ({ productId, units }) => {
       { session },
     );
 
-    const updatedProduct = await syncImeiProductStock(productId, session);
+    const updatedProduct = await syncImeiProductStock(productId, shopId, session);
 
     await InventoryTransaction.create(
       [
         {
           productId,
+          shopId,
           type: "add",
           quantity,
           previousStock,
@@ -86,6 +100,26 @@ const addMobileUnits = async ({ productId, units }) => {
     );
 
     await session.commitTransaction();
+
+    await recordStockPurchaseBill(
+      {
+        purchasePaymentType,
+        supplierBillNumber,
+        paidAmount,
+        supplierId: product.supplier,
+        totalAmount: quantity * product.purchasePrice,
+        items: [
+          {
+            description: `${product.name} — ${quantity} device(s)`,
+            quantity,
+            unitCost: product.purchasePrice,
+            amount: quantity * product.purchasePrice,
+          },
+        ],
+        note: `IMEI stock: ${quantity} unit(s)`,
+      },
+      user,
+    );
 
     return { units: createdUnits, product: updatedProduct };
   } catch (error) {
@@ -99,12 +133,14 @@ const addMobileUnits = async ({ productId, units }) => {
   }
 };
 
-const searchByImei = async (imei) => {
+const searchByImei = async (imei, user) => {
   if (!imei?.trim()) {
     throw new ApiError(400, "IMEI is required");
   }
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
-  const unit = await MobileUnit.findOne({ imei: imei.trim() }).populate(
+  const unit = await MobileUnit.findOne({ shopId, imei: imei.trim() }).populate(
     "productId",
     "name brand category sellingPrice",
   );
@@ -116,15 +152,17 @@ const searchByImei = async (imei) => {
   return unit;
 };
 
-const updateMobileUnitStatus = async (unitId, status) => {
+const updateMobileUnitStatus = async (unitId, status, user) => {
   assertValidObjectId(unitId, "unitId");
+  const shopId = user?.shopId;
+  if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
   const allowed = ["in_stock", "sold", "returned", "defective"];
   if (!allowed.includes(status)) {
     throw new ApiError(400, `Status must be one of: ${allowed.join(", ")}`);
   }
 
-  const unit = await MobileUnit.findById(unitId);
+  const unit = await MobileUnit.findOne({ _id: unitId, shopId });
   if (!unit) {
     throw new ApiError(404, "Mobile unit not found");
   }
@@ -152,7 +190,7 @@ const updateMobileUnitStatus = async (unitId, status) => {
     }
 
     await unit.save({ session });
-    const product = await syncImeiProductStock(unit.productId, session);
+    const product = await syncImeiProductStock(unit.productId, shopId, session);
 
     await session.commitTransaction();
     return { unit, product };

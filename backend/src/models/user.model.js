@@ -4,6 +4,11 @@ import bcrypt from "bcrypt";
 
 const userShema = new Schema(
   {
+    fullName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     username: {
       type: String,
       required: true,
@@ -17,6 +22,17 @@ const userShema = new Schema(
       unique: true,
       lowercase: true,
       trim: true,
+    },
+    shopId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Shop",
+      required: true,
+      index: true,
+    },
+    role: {
+      type: String,
+      enum: ["owner", "admin", "staff"],
+      default: "owner",
     },
     password: {
       type: String,
@@ -44,6 +60,9 @@ userShema.methods.generateAccessToken = function () {
       _id: this._id,
       email: this.email,
       username: this.username,
+      fullName: this.fullName,
+      shopId: this.shopId,
+      role: this.role,
     },
     process.env.ACCESS_TOKEN_SECRET,
     {

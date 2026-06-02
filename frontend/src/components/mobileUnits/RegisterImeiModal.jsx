@@ -13,10 +13,23 @@ const unitSchema = z.object({
   purchaseDate: z.string().min(1, "Date required"),
 });
 
-const registerSchema = z.object({
-  productId: z.string().min(1, "Product is required"),
-  units: z.array(unitSchema).min(1),
-});
+const registerSchema = z
+  .object({
+    productId: z.string().min(1, "Product is required"),
+    units: z.array(unitSchema).min(1),
+    purchasePaymentType: z.enum(["paid", "credit"]).default("paid"),
+    supplierBillNumber: z.string().optional(),
+    paidAmount: z.coerce.number().min(0).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.purchasePaymentType === "credit" && !data.supplierBillNumber?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["supplierBillNumber"],
+        message: "Supplier bill / invoice number is required for credit purchase",
+      });
+    }
+  });
 
 export const RegisterImeiModal = ({
   isOpen,
@@ -29,16 +42,24 @@ export const RegisterImeiModal = ({
     register,
     control,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       productId: "",
       units: [{ imei: "", color: "", storage: 128, purchaseDate: "" }],
+      purchasePaymentType: "paid",
+      supplierBillNumber: "",
+      paidAmount: 0,
     },
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "units" });
+  const productId = watch("productId");
+  const purchasePaymentType = watch("purchasePaymentType");
+  const selectedProduct = imeiProducts.find((p) => p._id === productId);
+  const unitCount = fields.length;
 
   return (
     <Modal
@@ -66,6 +87,45 @@ export const RegisterImeiModal = ({
           error={errors.productId?.message}
           {...register("productId")}
         />
+
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-800">Supplier purchase</p>
+          <Select
+            label="Payment to supplier"
+            options={[
+              { value: "paid", label: "Paid in full" },
+              { value: "credit", label: "On supplier credit (partial or full)" },
+            ]}
+            error={errors.purchasePaymentType?.message}
+            {...register("purchasePaymentType")}
+          />
+          {purchasePaymentType === "credit" && (
+            <>
+              <Input
+                label="Supplier bill / invoice number"
+                placeholder="Number printed on supplier's invoice"
+                error={errors.supplierBillNumber?.message}
+                {...register("supplierBillNumber")}
+              />
+              <Input
+                label="Paid now to supplier"
+                type="number"
+                error={errors.paidAmount?.message}
+                {...register("paidAmount")}
+              />
+              {selectedProduct && (
+                <p className="text-xs text-slate-500">
+                  Purchase total ({unitCount} device
+                  {unitCount !== 1 ? "s" : ""}): ₹
+                  {(
+                    unitCount * Number(selectedProduct.purchasePrice || 0)
+                  ).toLocaleString("en-IN")}
+                  . Balance due appears in Finance → Supplier Credit.
+                </p>
+              )}
+            </>
+          )}
+        </div>
 
         {fields.map((field, index) => (
           <div
