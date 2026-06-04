@@ -49,25 +49,21 @@ const updateRepairStatus = async (jobId, data, user) => {
   if (data.status) job.status = data.status;
   if (data.finalCost != null) job.finalCost = data.finalCost;
 
-  if (data.status === "delivered") {
-    job.deliveredAt = new Date();
-    if (job.finalCost > 0) {
-      await CashbookEntry.create({
-        shopId,
-        type: "in",
-        category: "sale",
-        amount: job.finalCost,
-        note: `Repair job ${job.jobNumber} payment`,
-        referenceId: job._id,
-        referenceType: "RepairJob",
-        entryDate: new Date(),
-        createdBy: user._id,
-      });
-    }
+  if (data.status === "completed") {
+    job.completedAt = new Date();
   }
 
   await job.save();
   return job.populate("customerId", "name phone");
+};
+
+const deleteRepairJob = async (jobId, user) => {
+  const shopId = user?.shopId;
+  assertValidObjectId(jobId, "jobId");
+  const job = await RepairJob.findOne({ _id: jobId, shopId });
+  if (!job) throw new ApiError(404, "Repair job not found");
+  await RepairJob.deleteOne({ _id: jobId, shopId });
+  return { deleted: true };
 };
 
 const listRepairJobs = async (query, user) => {
@@ -88,4 +84,4 @@ const listRepairJobs = async (query, user) => {
   return { jobs, pagination: buildPaginationMeta(total, page, limit) };
 };
 
-export { createRepairJob, updateRepairStatus, listRepairJobs };
+export { createRepairJob, updateRepairStatus, deleteRepairJob, listRepairJobs };

@@ -169,6 +169,11 @@ export const InvoiceModal = ({ isOpen, onClose, invoice }) => {
                   {/* qty */}
                   <td className="px-4 py-4 text-sm text-slate-700">
                     {item.quantity}
+                    {(item.returnedQuantity || 0) > 0 && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Returned: {item.returnedQuantity}
+                      </p>
+                    )}
                   </td>
 
                   {/* price */}
@@ -198,6 +203,27 @@ export const InvoiceModal = ({ isOpen, onClose, invoice }) => {
                 {formatCurrency(invoice.totalAmount)}
               </p>
             </div>
+            {(invoice.totalRefunded || 0) > 0 && (
+              <>
+                <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2 text-sm text-amber-700">
+                  <span>Refunded</span>
+                  <span>-{formatCurrency(invoice.totalRefunded)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-700">Net Due</p>
+                  <p className="text-lg font-bold text-slate-900">
+                    {formatCurrency(
+                      Math.max(
+                        0,
+                        invoice.totalAmount -
+                          (invoice.totalRefunded || 0) -
+                          (invoice.amountPaid || 0),
+                      ),
+                    )}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

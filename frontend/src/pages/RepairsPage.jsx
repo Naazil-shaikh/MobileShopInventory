@@ -8,6 +8,13 @@ import { Card } from "../components/ui/Card.jsx";
 import { getApiErrorMessage } from "../utils/format.js";
 import { Alert } from "../components/ui/Alert.jsx";
 
+const STATUS_STYLES = {
+  pending: "bg-slate-100 text-slate-700 border-slate-200",
+  in_progress: "bg-amber-100 text-amber-700 border-amber-200",
+  completed: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  cancelled: "bg-rose-100 text-rose-700 border-rose-200",
+};
+
 export const RepairsPage = () => {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
@@ -31,6 +38,24 @@ export const RepairsPage = () => {
 
   const createMutation = useMutation({
     mutationFn: repairService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["repairs"] });
+      setError("");
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }) => repairService.update(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["repairs"] });
+      setError("");
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: repairService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repairs"] });
       setError("");
@@ -86,19 +111,83 @@ export const RepairsPage = () => {
           </div>
         </Card>
         <Card>
-          <h2 className="mb-3 font-semibold">Active Jobs</h2>
-          <ul className="space-y-2 text-sm">
-            {data?.jobs?.map((j) => (
-              <li key={j._id} className="rounded-lg bg-slate-50 px-3 py-2">
-                <p className="font-medium">
-                  {j.jobNumber} — {j.deviceName}
-                </p>
-                <p className="text-slate-500">
-                  {j.customerId?.name} · {j.status}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <h2 className="mb-3 font-semibold">Jobs</h2>
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="py-2 pr-3">Job</th>
+                  <th className="py-2 pr-3">Customer</th>
+                  <th className="py-2 pr-3">Status</th>
+                  <th className="py-2 pr-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data?.jobs?.map((j) => {
+                  const badge =
+                    STATUS_STYLES[j.status] ||
+                    "bg-slate-100 text-slate-700 border-slate-200";
+                  const isCompleted = j.status === "completed";
+                  return (
+                    <tr key={j._id} className="align-top">
+                      <td className="py-3 pr-3">
+                        <p className="font-semibold text-slate-900">
+                          {j.jobNumber}
+                        </p>
+                        <p className="text-slate-500">{j.deviceName}</p>
+                      </td>
+                      <td className="py-3 pr-3">
+                        {j.customerId?.name || "-"}
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${badge}`}
+                        >
+                          {j.status}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              updateMutation.mutate({
+                                id: j._id,
+                                payload: { status: "in_progress" },
+                              })
+                            }
+                            disabled={j.status !== "pending"}
+                          >
+                            Start Repair
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              updateMutation.mutate({
+                                id: j._id,
+                                payload: { status: "completed" },
+                              })
+                            }
+                            disabled={isCompleted || j.status === "cancelled"}
+                          >
+                            Mark Completed
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => deleteMutation.mutate(j._id)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </Card>
       </div>
     </div>

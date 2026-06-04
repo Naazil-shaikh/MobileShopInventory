@@ -32,7 +32,7 @@ export const MobileUnitsPage = () => {
     productsData?.products?.filter((p) => p.hasIMEI) ?? [];
 
   const {
-    data: unit,
+    data: searchResult,
     isFetching,
     refetch,
   } = useQuery({
@@ -43,6 +43,9 @@ export const MobileUnitsPage = () => {
 
     enabled: false,
   });
+
+  const unit = searchResult?.unit;
+  const linkedSale = searchResult?.linkedSale;
 
   const registerMutation = useMutation({
     mutationFn: mobileUnitService.register,
@@ -77,9 +80,22 @@ export const MobileUnitsPage = () => {
     mutationFn: ({ id, status }) =>
       mobileUnitService.updateStatus(id, status),
 
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       refetch();
-      setSuccess("Status updated");
+      queryClient.invalidateQueries({ queryKey: ["sales-returns"] });
+      queryClient.invalidateQueries({ queryKey: ["returns"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["finance-overview"] });
+
+      if (variables.status === "returned") {
+        setSuccess(
+          data?.saleReturn
+            ? `Returned and invoice ${data.sale?.invoiceNumber || ""} updated`
+            : "Device marked as returned",
+        );
+      } else {
+        setSuccess("Status updated");
+      }
     },
 
     onError: (err) => setError(getApiErrorMessage(err)),
@@ -104,9 +120,6 @@ export const MobileUnitsPage = () => {
 
     returned:
       "bg-amber-100 text-amber-700 border-amber-200",
-
-    defective:
-      "bg-rose-100 text-rose-700 border-rose-200",
   };
 
   return (
@@ -268,6 +281,18 @@ export const MobileUnitsPage = () => {
                         </p>
                       </div>
                     )}
+
+                    {linkedSale && (
+                      <div className="rounded-xl bg-white px-3 py-2 border border-slate-200">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          Invoice
+                        </p>
+
+                        <p className="mt-1 text-sm font-medium text-slate-700">
+                          {linkedSale.invoiceNumber}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -290,19 +315,40 @@ export const MobileUnitsPage = () => {
                   </p>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Change the lifecycle state of this device
+                    {unit.status === "sold"
+                      ? "Mark Return to process refund and update the linked invoice"
+                      : "Change the lifecycle state of this device"}
                   </p>
                 </div>
 
                 <Select
-                  options={MOBILE_UNIT_STATUSES}
+                  key={`${unit._id}-${unit.status}`}
+                  options={MOBILE_UNIT_STATUSES.filter((opt) => {
+                    if (unit.status === "sold") {
+                      return opt.value === "returned";
+                    }
+                    if (unit.status === "returned") {
+                      return opt.value === "in_stock";
+                    }
+                    if (unit.status === "in_stock") {
+                      return opt.value !== "returned";
+                    }
+                    return true;
+                  })}
                   defaultValue={unit.status}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === "returned" && unit.status === "sold") {
+                      const ok = window.confirm(
+                        "This will create a return record, refund the line amount, and update the invoice. Continue?",
+                      );
+                      if (!ok) return;
+                    }
                     statusMutation.mutate({
                       id: unit._id,
-                      status: e.target.value,
-                    })
-                  }
+                      status: next,
+                    });
+                  }}
                   className="w-full sm:w-[220px]"
                 />
               </div>

@@ -13,4 +13,8 @@ export const repairService = {
     const { data } = await apiClient.patch(`/repairs/${id}`, payload);
     return data.data;
   },
+  delete: async (id) => {
+    const { data } = await apiClient.delete(`/repairs/${id}`);
+    return data.data;
+  },
 };

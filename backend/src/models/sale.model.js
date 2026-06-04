@@ -23,6 +23,11 @@ const saleSchema = new mongoose.Schema({
         type: Number,
         required: true,
       },
+      returnedQuantity: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
       price: {
         type: Number,
         required: true,
@@ -42,6 +47,11 @@ const saleSchema = new mongoose.Schema({
   totalAmount: {
     type: Number,
     required: true,
+  },
+  totalRefunded: {
+    type: Number,
+    default: 0,
+    min: 0,
   },
   paymentMethod: {
     type: String,

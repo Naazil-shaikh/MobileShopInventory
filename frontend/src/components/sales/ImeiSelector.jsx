@@ -32,18 +32,25 @@ export const ImeiSelector = ({
     setLoading(true);
     try {
       const unit = await mobileUnitService.searchByImei(imeiInput.trim());
-      const unitProductId = unit.productId?._id || unit.productId;
+      const unitProductId = unit.unit.productId?._id || unit.unit.productId;
+
+      console.log(unit.unit);
+      console.log(unit.unit.productId._id);
+      console.log(productId);
 
       if (unitProductId !== productId) {
         setError("IMEI does not belong to this product");
         return;
       }
-      if (unit.status !== "in_stock") {
-        setError(`Device is not in stock (status: ${unit.status})`);
+      if (unit.unit.status !== "in_stock") {
+        setError(`Device is not in stock (status: ${unit.unit.status})`);
         return;
       }
 
-      onChange([...selectedUnits, { _id: unit._id, imei: unit.imei }]);
+      onChange([
+        ...selectedUnits,
+        { _id: unit.unit._id, imei: unit.unit.imei },
+      ]);
       setImeiInput("");
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -66,7 +73,9 @@ export const ImeiSelector = ({
           placeholder="Scan or enter IMEI"
           value={imeiInput}
           onChange={(e) => setImeiInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addImei())}
+          onKeyDown={(e) =>
+            e.key === "Enter" && (e.preventDefault(), addImei())
+          }
         />
         <Button
           type="button"

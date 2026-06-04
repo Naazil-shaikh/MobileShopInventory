@@ -15,8 +15,7 @@ export const PAYMENT_METHODS = [
 export const MOBILE_UNIT_STATUSES = [
   { value: "in_stock", label: "In Stock" },
   { value: "sold", label: "Sold" },
-  { value: "returned", label: "Returned" },
-  { value: "defective", label: "Defective" },
+  { value: "returned", label: "Return" },
 ];
 
 export const INVENTORY_ACTIONS = [

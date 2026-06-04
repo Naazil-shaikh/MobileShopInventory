@@ -5,6 +5,7 @@ import {
   getArchivedReports,
   getProfitSummary,
 } from "../services/report.service.js";
+import { exportReportExcel } from "../services/reportExport.service.js";
 
 const stockReportHandler = asyncHandler(async (req, res) => {
   const { period } = req.params;
@@ -35,4 +36,27 @@ const profitSummaryHandler = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, summary, "Profit summary fetched"));
 });
 
-export { stockReportHandler, archivedReportsHandler, profitSummaryHandler };
+const exportExcelHandler = asyncHandler(async (req, res) => {
+  const { period } = req.params;
+  const year = req.query.year ? Number(req.query.year) : undefined;
+
+  const { workbook, filename } = await exportReportExcel(req.user, period, {
+    year,
+  });
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  await workbook.xlsx.write(res);
+  res.end();
+});
+
+export {
+  stockReportHandler,
+  archivedReportsHandler,
+  profitSummaryHandler,
+  exportExcelHandler,
+};

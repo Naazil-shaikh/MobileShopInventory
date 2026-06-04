@@ -338,6 +338,7 @@ const getSaleHistory = async (query, user) => {
     Sale.find(filter)
       .populate("customerId", "name phone")
       .populate("items.productId", "name brand")
+      .populate("items.imeiIds", "imei color storage status")
       .populate("soldBy", "username")
       .sort({ createdAt: -1 })
       .skip(skip)

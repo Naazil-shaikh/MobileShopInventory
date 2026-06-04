@@ -6,6 +6,10 @@ import { ApiError } from "../utils/ApiError.js";
 import { assertValidObjectId } from "../utils/validateObjectId.js";
 import { syncImeiProductStock } from "./inventory.service.js";
 import { recordStockPurchaseBill } from "./finance.service.js";
+import {
+  createReturnForImeiUnit,
+  findSaleByImeiUnitId,
+} from "./saleReturn.service.js";
 
 const validateUnitPayload = (unit) => {
   const { imei, color, storage, purchaseDate } = unit;
@@ -149,7 +153,12 @@ const searchByImei = async (imei, user) => {
     throw new ApiError(404, "Mobile unit not found");
   }
 
-  return unit;
+  let linkedSale = null;
+  if (unit.status === "sold" || unit.status === "returned") {
+    linkedSale = await findSaleByImeiUnitId(unit._id, shopId);
+  }
+
+  return { unit, linkedSale };
 };
 
 const updateMobileUnitStatus = async (unitId, status, user) => {
@@ -157,7 +166,7 @@ const updateMobileUnitStatus = async (unitId, status, user) => {
   const shopId = user?.shopId;
   if (!shopId) throw new ApiError(401, "Unauthorized shop access");
 
-  const allowed = ["in_stock", "sold", "returned", "defective"];
+  const allowed = ["in_stock", "sold", "returned"];
   if (!allowed.includes(status)) {
     throw new ApiError(400, `Status must be one of: ${allowed.join(", ")}`);
   }
@@ -167,10 +176,30 @@ const updateMobileUnitStatus = async (unitId, status, user) => {
     throw new ApiError(404, "Mobile unit not found");
   }
 
-  if (unit.status === "sold" && status !== "returned") {
+  const previousStatus = unit.status;
+
+  if (status === "returned" && previousStatus === "sold") {
+    const result = await createReturnForImeiUnit(
+      unitId,
+      user,
+      `Return from Mobile IMEI (${unit.imei})`,
+    );
+    return {
+      unit: result.unit,
+      product: await Product.findOne({ _id: unit.productId, shopId }),
+      saleReturn: result.saleReturn,
+      sale: result.sale,
+    };
+  }
+
+  if (status === "sold" && previousStatus !== "in_stock") {
+    throw new ApiError(400, "Only in-stock devices can be marked as sold");
+  }
+
+  if (status === "in_stock" && !["returned", "in_stock"].includes(previousStatus)) {
     throw new ApiError(
       400,
-      "Sold units can only be moved to returned status manually",
+      "Only returned devices can be moved back to in stock",
     );
   }
 
@@ -178,14 +207,11 @@ const updateMobileUnitStatus = async (unitId, status, user) => {
   session.startTransaction();
 
   try {
-    const previousStatus = unit.status;
     unit.status = status;
 
     if (status === "sold") {
       unit.sellingDate = new Date();
-    }
-
-    if (status === "returned" && previousStatus === "sold") {
+    } else {
       unit.sellingDate = undefined;
     }
 
