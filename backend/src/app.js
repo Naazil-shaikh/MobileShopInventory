@@ -26,9 +26,27 @@ import alertRouter from "./routes/alert.routes.js";
 const app = express();
 console.log("CORS_ORIGIN =", process.env.CORS_ORIGIN);
 
+// app.use(
+//   cors({
+//     origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+//     credentials: true,
+//   }),
+// );
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://mobile-shop-inventory-system.vercel.app",
+];
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }),
 );
