@@ -1,3 +1,9 @@
+import dotenv from "dotenv";
+
+dotenv.config({
+  path: "./.env",
+});
+
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -18,6 +24,7 @@ import repairRouter from "./routes/repair.routes.js";
 import alertRouter from "./routes/alert.routes.js";
 
 const app = express();
+console.log("CORS_ORIGIN =", process.env.CORS_ORIGIN);
 
 app.use(
   cors({
